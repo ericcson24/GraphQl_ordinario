@@ -101,47 +101,52 @@ export const resolvers={
     },
 
     //update
-    updateRestaurante: async(
-      _:unknown,
-      args:MutationArgs,
-      context:Context
-    ):Promise<Restaurante>=>{
+    updateRestaurante: async (
+      _: unknown,
+      args: MutationArgs,
+      context: Context
+    ): Promise<Restaurante> => {
       
-      const { id, telefono, ciudad } = args
-      
-      // Si hay teléfono, validarlo y obtener country
-      if(telefono) {
-        const { is_valid, country } = await validatephone(telefono)
-        if(!is_valid) throw new GraphQLError("El teléfono no es válido")
-        
-        // Agregar country a los args
-        args = {...args, pais:country} 
+      const { id, ...updateArgs } = args;
+    
+      // Validar teléfono si se proporciona
+      if (args.telefono) {
+        const validacionTelefono = await validatephone(args.telefono);
+        if (!validacionTelefono.is_valid) {
+          throw new GraphQLError("El teléfono no es válido");
+        }
+        updateArgs.pais = validacionTelefono.country;
       }
-      
-      // Si hay ciudad, obtener las coordenadas
-      if(ciudad) {
-        const { latitud, longitud } = await getLatLon(ciudad)
-        // Agregar coordenadas a los args
-        args = {...args, latitud, longitud} 
+    
+      // Obtener coordenadas si se proporciona ciudad
+      if (args.ciudad) {
+        const { latitud, longitud } = await getLatLon(args.ciudad);
+        updateArgs.latitud = latitud;
+        updateArgs.longitud = longitud;
       }
-      
-      // Verificar si el teléfono ya existe en otro restaurante
-      if(telefono) {
-        const phone_exist = await context.RestauranteCollection.findOne({telefono})
-        if(phone_exist) throw new GraphQLError("Ya existe otro restaurante con ese teléfono")
+    
+      // Comprobar si el teléfono ya existe en otro restaurante
+      if (args.telefono) {
+        const existeTelefono = await context.RestauranteCollection.findOne({ telefono: args.telefono });
+        if (existeTelefono) {
+          throw new GraphQLError("Ya existe otro restaurante con ese teléfono");
+        }
       }
-      
-      // Realizar la actualización
+    
+      // Realizar la actualización sin incluir el id
       const result = await context.RestauranteCollection.findOneAndUpdate(
-        {_id: new ObjectId(id)},
-        {$set: {...args}}, 
-        {returnDocument: "after"}
-      )
-      
-      if(!result) throw new GraphQLError("Restaurante no encontrado")
-      
-      return result
+        { _id: new ObjectId(id) },
+        { $set: { ...updateArgs } },
+        { returnDocument: "after" }
+      );
+    
+      if (!result) {
+        throw new GraphQLError("Restaurante no encontrado");
+      }
+    
+      return result;
     },
+
     
     //delete
     deleteRestaurante:async(
